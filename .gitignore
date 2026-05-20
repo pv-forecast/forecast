@@ -1,0 +1,38 @@
+# Data (private - see github.com/pv-forecast/data)
+Daten/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model outputs (regeneratable)
+forecasts/
+metrics/
+figures/
+models/lstm/saved/
+
+# Temporary
+*.tmp
+*.log
+
+# Project notes (local only)
+CLAUDE.md
+EXPERIMENT_LOG.md
