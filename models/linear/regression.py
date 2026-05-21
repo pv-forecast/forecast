@@ -67,11 +67,13 @@ def run_forecast(target,horizon):
     else:  # BOTH
         feature_cols = feature_cols_G + feature_cols_B
 
-    # Cross-irradiance features + weather variables + CSGHI
+    # Cross-irradiance features + weather variables + CSGHI ratio for this horizon
     # Use set to avoid duplicates (BNI_kt_* already in feature_cols_B, gti_kt_* already in feature_cols_G)
     cross_irr_cols = ["BNI_kt_one", "BNI_kt_two", "BNI_kt_three",
                       "gti_kt_one", "gti_kt_two", "gti_kt_three"]
-    weather_cols = ["wdir", "tpw", "Az", "TL", "kd", "Ta", "vw", "RH", "El_x", "Patm", "Pdc_33", "CSGHI"]
+    # Include CSGHI_ratio for this specific horizon - same info Smart Persistence uses
+    csghi_ratio_col = f"CSGHI_ratio_{horizon}"
+    weather_cols = ["wdir", "tpw", "Az", "TL", "kd", "Ta", "vw", "RH", "El_x", "Patm", "Pdc_33", "CSGHI", csghi_ratio_col]
     all_cols = list(dict.fromkeys(feature_cols + cross_irr_cols + weather_cols))  # preserves order, removes duplicates
     train_X = train[all_cols].values
     test_X = test[all_cols].values

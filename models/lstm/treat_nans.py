@@ -18,20 +18,45 @@ def IndicatorNaN(train_X, test_X, train_Y):
 
     return train_X, test_X, train_Y
 
-def split_sequences(sequences, n_steps_in, n_steps_out):
+def split_sequences(sequences, n_steps_in, n_steps_out, n_sp_cols=36):
+    """
+    Split sequences for LSTM training.
 
-    X, y , y_sp, ENI, = list(), list(), list(), list()
+    Args:
+        sequences: Stacked array with columns:
+            - Features (n_features columns)
+            - Target power (1 column, normalized)
+            - Smart Persistence per horizon (n_sp_cols columns, in Watts)
+            - ENI (1 column)
+        n_steps_in: Input sequence length (seq_dim)
+        n_steps_out: Output horizon (window_LSTM)
+        n_sp_cols: Number of Smart Persistence columns (default 36 for 5-180min)
+    """
+    X, y, y_sp, ENI = list(), list(), list(), list()
+
+    # Column layout: [features..., target, sp_5min, sp_10min, ..., sp_180min, ENI]
+    n_cols = sequences.shape[1]
+    n_features = n_cols - 1 - n_sp_cols - 1  # Subtract target, sp columns, and ENI
 
     for i in range(len(sequences)):
-        # find the end of this pattern
         end_ix = i + n_steps_in
         out_end_ix = end_ix + n_steps_out - 1
-        # check if we are beyond the dataset
         if out_end_ix > len(sequences):
             break
-        # gather input and output parts of the pattern
-        seq_x, seq_y, seq_ysp, seq_ENI, = sequences[i:end_ix, 0:sequences.shape[1]-3], sequences[end_ix - 1:out_end_ix, -3],\
-                                 sequences[end_ix - 1:end_ix, -2], sequences[end_ix - 1:out_end_ix, -1]
+
+        # X: input features for seq_dim timesteps
+        seq_x = sequences[i:end_ix, 0:n_features]
+
+        # Y: target power for n_steps_out future timesteps (from consecutive rows)
+        seq_y = sequences[end_ix - 1:out_end_ix, n_features]
+
+        # Smart Persistence: all horizon-specific values at current time (row end_ix-1)
+        # Shape: (n_sp_cols,) = (36,) for each horizon
+        seq_ysp = sequences[end_ix - 1, n_features + 1:n_features + 1 + n_sp_cols]
+
+        # ENI for future timesteps
+        seq_ENI = sequences[end_ix - 1:out_end_ix, -1]
+
         X.append(seq_x)
         y.append(seq_y)
         y_sp.append(seq_ysp)

@@ -10,7 +10,7 @@ class DataManager:
         self.CAPACITY = 20808.66
         self.delta = 5 # step size [min]
 
-        filename = 'Daten/PVAMM_201911-202011_PT5M_merged.csv'
+        filename = 'data/PVAMM_201911-202011_PT5M_merged.csv'
         data = pd.read_csv(filename)
 
         # Calculate clearness indices
@@ -124,13 +124,24 @@ class DataManager:
         Pdc_35_train = self.train["Pdc_33"].shift(periods=back)
         Pdc_35_train = Pdc_35_train.div(self.CAPACITY)
 
+        # Add CSGHI ratio features for each horizon (same info Smart Persistence uses)
+        # CSGHI(t+h) / CSGHI(t) - known for future times since it only depends on sun position
+        CSGHI_ratio_features_train = pd.DataFrame()
+        CSGHI_current = self.train["CSGHI"].replace(0, np.nan)
+        for h in range(1, window_tar + 1):
+            horizon_min = self.delta * h
+            CSGHI_future = self.train["CSGHI"].shift(periods=-h)
+            ratio = CSGHI_future / CSGHI_current
+            ratio = ratio.fillna(1.0)
+            CSGHI_ratio_features_train[f"CSGHI_ratio_{horizon_min}min"] = ratio
+
         features_train = pd.concat([self.train["t"], featuresB_GHI, featuresB_BNI, featuresV_GHI, featuresV_BNI,
                               featuresL_GHI, featuresL_BNI, self.train["BNI_kt_one"], self.train["BNI_kt_two"],
                               self.train["BNI_kt_three"], self.train["gti_kt_one"], self.train["gti_kt_two"],
                               self.train["gti_kt_three"], self.train["Ta"], self.train["vw"], self.train["RH"], self.train["wdir"], self.train["tpw"],
                               self.train["Az"], self.train["TL"], Pdc_35_train, self.train["AMa"], self.train["kd"],
                               self.train["El"], self.train["CS"], self.train["Patm"],
-                              self.train["CSGHI"], self.train["GHI"]], axis=1)
+                              self.train["CSGHI"], self.train["GHI"], CSGHI_ratio_features_train], axis=1)
 
         # , self.train["BNI_kt_one"], self.train["BNI_kt_two"],
         #                               self.train["BNI_kt_three"], self.train["Ta"], self.train["CS"], self.train["Patm"]
@@ -190,13 +201,23 @@ class DataManager:
         Pdc_35_test = self.test["Pdc_33"].shift(periods=back)
         Pdc_35_test = Pdc_35_test.div(self.CAPACITY)
 
+        # Add CSGHI ratio features for each horizon (same info Smart Persistence uses)
+        CSGHI_ratio_features_test = pd.DataFrame()
+        CSGHI_current = self.test["CSGHI"].replace(0, np.nan)
+        for h in range(1, window_tar + 1):
+            horizon_min = self.delta * h
+            CSGHI_future = self.test["CSGHI"].shift(periods=-h)
+            ratio = CSGHI_future / CSGHI_current
+            ratio = ratio.fillna(1.0)
+            CSGHI_ratio_features_test[f"CSGHI_ratio_{horizon_min}min"] = ratio
+
         features_test = pd.concat([self.test["t"], featuresB_GHI, featuresB_BNI, featuresV_GHI, featuresV_BNI,
                               featuresL_GHI, featuresL_BNI, self.test["BNI_kt_one"], self.test["BNI_kt_two"],
                               self.test["BNI_kt_three"], self.test["gti_kt_one"], self.test["gti_kt_two"],
                               self.test["gti_kt_three"], self.test["Ta"], self.test["vw"], self.test["RH"], self.test["wdir"], self.test["tpw"],
                               self.test["Az"], self.test["TL"], Pdc_35_test, self.test["AMa"], self.test["kd"],
                               self.test["El"], self.test["CS"], self.test["Patm"],
-                              self.test["CSGHI"], self.test["GHI"]], axis=1)
+                              self.test["CSGHI"], self.test["GHI"], CSGHI_ratio_features_test], axis=1)
 
         # , self.test["BNI_kt_one"], self.test["BNI_kt_two"],
         #                               self.test["BNI_kt_three"], self.test["Ta"], self.test["CS"], self.test["Patm"]
@@ -280,7 +301,7 @@ class DataManager:
 
         return target.copy(deep_copy)
 
-    def get_features_LSTM (self, window_LSTM, feature_str, include_future_el=True):
+    def get_features_LSTM (self, window_LSTM, feature_str, include_future_el=True, include_csghi_ratio=True):
         """
         Get features for LSTM model.
 
@@ -288,6 +309,7 @@ class DataManager:
             window_LSTM: Output window size (number of future timesteps to predict)
             feature_str: List of feature column names
             include_future_el: If True, add future sun elevation for each output timestep
+            include_csghi_ratio: If True, add CSGHI ratio features (same info Smart Persistence uses)
         """
         # Train features
         features_train = self.train[feature_str].copy()
@@ -301,6 +323,17 @@ class DataManager:
                     el_future = self.train["El"].shift(periods=-h)
                     features_train[f"El_future_{h*5}min"] = el_future
 
+        # Add CSGHI ratio features at key horizons (same info Smart Persistence uses)
+        if include_csghi_ratio and "CSGHI" in self.train.columns:
+            CSGHI_current = self.train["CSGHI"].replace(0, np.nan)
+            horizons = [6, 12, 18, 24, 30, 36]  # 30, 60, 90, 120, 150, 180 min
+            for h in horizons:
+                if h <= window_LSTM:
+                    CSGHI_future = self.train["CSGHI"].shift(periods=-h)
+                    ratio = CSGHI_future / CSGHI_current
+                    ratio = ratio.fillna(1.0)
+                    features_train[f"CSGHI_ratio_{h*5}min"] = ratio
+
         X_train = features_train[0:len(features_train) - window_LSTM]
 
         # Test features
@@ -313,6 +346,17 @@ class DataManager:
                     el_future = self.test["El"].shift(periods=-h)
                     features_test[f"El_future_{h*5}min"] = el_future
 
+        # Add CSGHI ratio features at key horizons (same info Smart Persistence uses)
+        if include_csghi_ratio and "CSGHI" in self.test.columns:
+            CSGHI_current = self.test["CSGHI"].replace(0, np.nan)
+            horizons = [6, 12, 18, 24, 30, 36]  # 30, 60, 90, 120, 150, 180 min
+            for h in horizons:
+                if h <= window_LSTM:
+                    CSGHI_future = self.test["CSGHI"].shift(periods=-h)
+                    ratio = CSGHI_future / CSGHI_current
+                    ratio = ratio.fillna(1.0)
+                    features_test[f"CSGHI_ratio_{h*5}min"] = ratio
+
         X_test = features_test[0:len(features_test) - window_LSTM]
 
         return X_train, X_test
@@ -321,31 +365,52 @@ class DataManager:
         # for Output -> Y (Power)
         # Train target
         # for LSTM Input for time t: x(t), y(t) in one row
-        # take the shortest backwards step as Smart Persistence Model (sp)
 
         Pdc_shift = pd.DataFrame()
-        Pdc_norm = self.train["Pdc_33"].div(self.CAPACITY)
-        # Smart Persistence: current value at t predicts all future horizons
-        Pdc_sp = self.train["Pdc_33"].copy()  # In Watts (not normalized)
-        Pdc_shift.insert(0, column='Pdc_sp', value=Pdc_sp)
+        Pdc_norm_orig = self.train["Pdc_33"].div(self.CAPACITY)
+        Pdc_norm = Pdc_norm_orig.copy()
+
+        # Smart Persistence per horizon: P_sp(t,h) = P(t) * CSGHI(t+h) / CSGHI(t)
+        # Store Pdc_sp for each horizon (in Watts, not normalized)
+        CSGHI_current = self.train["CSGHI"].replace(0, np.nan)
+        Pdc_current = self.train["Pdc_33"].copy()
 
         for col in range(1, window_LSTM + 1):
-            Pdc_shift.insert(col, column='Pdc_{}min'.format(self.delta * (col)), value=Pdc_norm)
+            horizon_min = self.delta * col
+            CSGHI_future = self.train["CSGHI"].shift(periods=-col)
+            CSGHI_ratio = CSGHI_future / CSGHI_current
+            CSGHI_ratio = CSGHI_ratio.fillna(1.0)
+            Pdc_sp_horizon = Pdc_current * CSGHI_ratio  # In Watts
+            Pdc_shift[f'Pdc_sp_{horizon_min}min'] = Pdc_sp_horizon
+
+        # Add actual power targets for each horizon (normalized)
+        for col in range(1, window_LSTM + 1):
+            Pdc_shift[f'Pdc_{self.delta * col}min'] = Pdc_norm
             Pdc_norm = Pdc_norm.shift(periods=-1)
 
         target_train = pd.concat([self.train["t"], Pdc_shift, self.train["ENI"], self.train["El"], self.train["Pdc_33"]], axis=1)
         Y_train = target_train[0:len(target_train) - window_LSTM]
 
         # Test target
-
         Pdc_shift = pd.DataFrame()
-        Pdc_norm = self.test["Pdc_33"].div(self.CAPACITY)
-        # Smart Persistence: current value at t predicts all future horizons
-        Pdc_sp = self.test["Pdc_33"].copy()  # In Watts (not normalized)
-        Pdc_shift.insert(0, column='Pdc_sp', value=Pdc_sp)
+        Pdc_norm_orig = self.test["Pdc_33"].div(self.CAPACITY)
+        Pdc_norm = Pdc_norm_orig.copy()
+
+        # Smart Persistence per horizon
+        CSGHI_current = self.test["CSGHI"].replace(0, np.nan)
+        Pdc_current = self.test["Pdc_33"].copy()
 
         for col in range(1, window_LSTM + 1):
-            Pdc_shift.insert(col, column='Pdc_{}min'.format(self.delta * (col)), value=Pdc_norm)
+            horizon_min = self.delta * col
+            CSGHI_future = self.test["CSGHI"].shift(periods=-col)
+            CSGHI_ratio = CSGHI_future / CSGHI_current
+            CSGHI_ratio = CSGHI_ratio.fillna(1.0)
+            Pdc_sp_horizon = Pdc_current * CSGHI_ratio  # In Watts
+            Pdc_shift[f'Pdc_sp_{horizon_min}min'] = Pdc_sp_horizon
+
+        # Add actual power targets for each horizon (normalized)
+        for col in range(1, window_LSTM + 1):
+            Pdc_shift[f'Pdc_{self.delta * col}min'] = Pdc_norm
             Pdc_norm = Pdc_norm.shift(periods=-1)
 
         target_test = pd.concat([self.test["t"], Pdc_shift, self.test["ENI"], self.test["El"], self.test["Pdc_33"]], axis=1)

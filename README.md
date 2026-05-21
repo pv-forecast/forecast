@@ -6,7 +6,7 @@ Comparing traditional ML models (Linear Regression, Ridge, Lasso) with LSTM neur
 
 ```
 forecast/
-├── Daten/                        # Data (private repo, see setup below)
+├── data/                         # Data (private repo, see setup below)
 ├── models/
 │   ├── linear/
 │   │   └── regression.py         # OLS, Ridge, Lasso (5-180min horizons)
@@ -18,8 +18,8 @@ forecast/
 │   │   ├── postprocess_lstm.py   # LSTM evaluation
 │   │   └── saved/                # Saved model weights
 │   └── timeseries/
-│       ├── ar.py                 # AutoRegression (1000 lags)
-│       └── arma.py               # ARIMA(30,1,0)
+│       ├── ar.py                 # AutoRegression (12 lags)
+│       └── arma.py               # ARIMAX(30,1,0) with exogenous
 ├── forecasts/
 │   └── linear/                   # Linear model predictions (HDF5)
 ├── metrics/
@@ -96,12 +96,12 @@ The data is stored in a separate private repository: [pv-forecast/data](https://
 git clone git@github.com:pv-forecast/forecast.git
 cd forecast
 
-# Clone data repo into Daten folder
-git clone git@github.com:pv-forecast/data.git Daten
+# Clone data repo into data folder
+git clone git@github.com:pv-forecast/data.git data
 ```
 
 **Data contents:**
-- Source: `Daten/PVAMM_201911-202011_PT5M_merged.csv`
+- Source: `data/PVAMM_201911-202011_PT5M_merged.csv`
 - 1 year of 5-minute interval measurements (Nov 2019 - Nov 2020)
 - Features: GHI, BNI, DHI, ENI, temperature, humidity, pressure, wind, solar angles
 - Target: Pdc (DC power output)
@@ -123,21 +123,25 @@ git clone git@github.com:pv-forecast/data.git Daten
 
 ## Baseline: Smart Persistence
 
-**Definition:** Smart Persistence scales the current power by the expected change in solar irradiance.
+**Definition:** Smart Persistence scales the current power by the expected change in clear-sky irradiance.
 
 ```
-P_predicted(t+h) = P_actual(t) * (ENI(t+h) / ENI(t))
+P_predicted(t+h) = P_actual(t) * (CSGHI(t+h) / CSGHI(t))
 ```
 
 Where:
 - `P_actual(t)` = current measured power
-- `ENI(t+h)` = extraterrestrial normal irradiance at future time (calculated from solar geometry)
-- `ENI(t)` = extraterrestrial normal irradiance at current time
+- `CSGHI(t+h)` = Clear-Sky GHI at future time (calculable from sun position)
+- `CSGHI(t)` = Clear-Sky GHI at current time
+
+**Why CSGHI instead of ENI?**
+- ENI varies only ~3% over the year (Earth-Sun distance)
+- CSGHI varies significantly throughout the day (accounts for sun angle)
 
 **Why this baseline?**
 - Better than naive persistence (`P(t+h) = P(t)`) because it accounts for sun movement
+- CSGHI is "free" information - calculable for any future time
 - Physically meaningful for solar forecasting
-- Same baseline used for ALL models (fair comparison)
 
 ## Features per Model
 
@@ -155,22 +159,26 @@ Where:
 | Weather                        | Ta, vw, RH, wdir, tpw, Patm, TL, kd                                                                                           | 8     |
 | Solar geometry                 | El, Az                                                                                                                        | 2     |
 | Current power                  | Pdc_33                                                                                                                        | 1     |
-| **Total**                      |                                                                                                                               | **77**|
+| Clear-sky GHI                  | CSGHI                                                                                                                         | 1     |
+| CSGHI ratio (per horizon)      | CSGHI_ratio_5min, 10min, ..., 180min                                                                                          | 36    |
+| **Total**                      |                                                                                                                               | **114**|
 
-### LSTM (5 features)
+### LSTM (17 features)
 
-| Category         | Features    | Count |
-|------------------|-------------|-------|
-| Raw irradiance   | GHI, BNI    | 2     |
-| Weather          | Ta          | 1     |
-| Solar geometry   | El, Az      | 2     |
-| **Total**        |             | **5** |
+| Category              | Features                                                | Count |
+|-----------------------|---------------------------------------------------------|-------|
+| Raw irradiance        | GHI, BNI                                                | 2     |
+| Weather               | Ta                                                      | 1     |
+| Solar geometry        | El, Az                                                  | 2     |
+| Future elevation      | El_future_30min, 60min, 90min, 120min, 150min, 180min   | 6     |
+| CSGHI ratio (future)  | CSGHI_ratio_30min, 60min, 90min, 120min, 150min, 180min | 6     |
+| **Total**             |                                                         | **17**|
 
 ### AR (1 feature)
 
 | Category           | Features | Count |
 |--------------------|----------|-------|
-| Power (1000 lags)  | Pdc      | 1     |
+| Power (12 lags)    | Pdc      | 1     |
 | **Total**          |          | **1** |
 
 ### ARIMAX (6 features)
@@ -195,7 +203,7 @@ Where:
 |--------------------|---------------------------|------------------------------|--------------|----------------|
 | **File**           | `regression.py`           | `lstm_manytomany.py`         | `ar.py`      | `arma.py`      |
 | **Library**        | scikit-learn              | PyTorch                      | statsmodels  | statsmodels    |
-| **Variants**       | OLS, Ridge (L2), Lasso (L1) | Many-to-Many               | AR(1000)     | ARIMAX(12,1,1) |
+| **Variants**       | OLS, Ridge (L2), Lasso (L1) | Many-to-Many               | AR(12)       | ARIMAX(30,1,0) |
 | **Hidden units**   | -                         | 75                           | -            | -              |
 | **Layers**         | 1                         | 2 LSTM + dropout             | -            | -              |
 | **Normalization**  | StandardScaler            | MinMaxScaler                 | None         | None           |
@@ -208,6 +216,6 @@ Where:
 |------------------------------|--------|----------------|----------------|--------------------|
 | Uses measured irradiance?    | Yes    | Yes            | No             | Yes (persistence)  |
 | Uses engineered features?    | Yes    | No             | No             | No                 |
-| Learns from sequence?        | No     | Yes (60 steps) | Yes (1000 lags)| Yes (12 lags)      |
+| Learns from sequence?        | No     | Yes (60 steps) | Yes (12 lags)  | Yes (30 lags)      |
 | Needs future X values?       | No     | No             | No             | Yes (persistence)  |
 | Captures non-linearity?      | No     | Yes            | No             | No                 |

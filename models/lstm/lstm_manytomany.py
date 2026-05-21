@@ -42,7 +42,8 @@ feature_str = ["GHI", "BNI", "Ta", "El", "Az"]
 window_LSTM = 36
 seq_dim = 60
 feat = DataManager()
-train_X, test_X = feat.get_features_LSTM(window_LSTM, feature_str, include_future_el=False)
+# include_future_el=True and include_csghi_ratio=True for fair comparison with Linear Regression
+train_X, test_X = feat.get_features_LSTM(window_LSTM, feature_str, include_future_el=True, include_csghi_ratio=True)
 train_Y, test_Y = feat.get_target_LSTM(window_LSTM)
 
 # Filter to daytime only (6:00-18:00) to avoid night-time bias
@@ -62,8 +63,16 @@ print("Applying daytime filter (6:00-18:00)...")
 train_X, train_Y = filter_daytime(train_X, train_Y)
 test_X, test_Y = filter_daytime(test_X, test_Y)
 
-train_y, train_ENI, Pdc_sp_train = train_Y[["Pdc_5min"]], train_Y[["ENI"]], train_Y[["Pdc_sp"]]
-test_y, test_ENI, Pdc_sp_test = test_Y[["Pdc_5min"]], test_Y[["ENI"]], test_Y[["Pdc_sp"]]
+# Extract target power (first horizon for training loss) and Smart Persistence per horizon
+train_y = train_Y[["Pdc_5min"]]
+test_y = test_Y[["Pdc_5min"]]
+train_ENI = train_Y[["ENI"]]
+test_ENI = test_Y[["ENI"]]
+
+# Smart Persistence columns per horizon (in Watts) - for fair comparison with CSGHI-based baseline
+sp_cols = [f"Pdc_sp_{h*5}min" for h in range(1, window_LSTM + 1)]
+Pdc_sp_train = train_Y[sp_cols]  # Shape: (n_samples, 36)
+Pdc_sp_test = test_Y[sp_cols]    # Shape: (n_samples, 36)
 
 # nan values
 train_X = train_X.fillna(value=0) # train_X = train_X.fillna(value=0), train_X = train_X.fillna(value=-100000)
@@ -94,8 +103,8 @@ test_X = scaler.transform(test_X)
 test_ENI = test_ENI.fillna(method="ffill")"""
 traindata_stacked = np.hstack((train_X, train_y, Pdc_sp_train, train_ENI))
 testdata_stacked = np.hstack((test_X, test_y, Pdc_sp_test, test_ENI))
-X, Y, train_sp, train_ENI = split_sequences(traindata_stacked, seq_dim, window_LSTM)
-test_X, Y_test, test_sp, test_ENI = split_sequences(testdata_stacked, seq_dim, window_LSTM)
+X, Y, train_sp, train_ENI = split_sequences(traindata_stacked, seq_dim, window_LSTM, n_sp_cols=window_LSTM)
+test_X, Y_test, test_sp, test_ENI = split_sequences(testdata_stacked, seq_dim, window_LSTM, n_sp_cols=window_LSTM)
 
 # to torch
 X_train = torch.from_numpy(X).float()
@@ -272,10 +281,10 @@ def trainModel(model, batch_size, seq_dim, epochs, patience=7, initial_lr=1e-3):
 # START
 # define which Model to load or name Model to be initialized (layer = ...)
 
-batch_size = 64  # Increased for stable training
+batch_size = 128  # Larger batch for more stable gradients
 layer = 2
 hidden = 75
-epochs = 50  # Full training run
+epochs = 100  # More epochs to see full convergence curve
 
 # CHECK if train/test Set seasonal or chronological
 file = "LSTM_m2m_Layer_{}_Input_{}_hidden_{}_future_El".format(layer, X_train.shape[2], hidden)
@@ -297,5 +306,5 @@ if load_model:
 else:
     model = initializeNewModel(input_dim=X_train.shape[2], hidden_dim=hidden, layer_dim=layer, output_dim=36)
     print(model)
-    test_loss = trainModel(model, batch_size, seq_dim, epochs, initial_lr=1e-3)
+    test_loss = trainModel(model, batch_size, seq_dim, epochs, patience=15, initial_lr=1e-3)
     print("finished training")
