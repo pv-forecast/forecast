@@ -1,14 +1,19 @@
 """Postprocess forecasts (statistics, plots, etc.)"""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import os
 import glob
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# Output directories
-METRICS_DIR = "metrics/linear"
-FORECASTS_DIR = "forecasts/linear"
-os.makedirs(METRICS_DIR, exist_ok=True)
+# Output directories (relative to project root)
+PROJECT_ROOT = Path(__file__).parent.parent
+METRICS_DIR = PROJECT_ROOT / "metrics/linear"
+FORECASTS_DIR = PROJECT_ROOT / "forecasts/linear"
+METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
 """filenames = ["forecasts_5min_BNI.h5", "forecasts_5min_GHI.h5", "forecasts_10min_BNI.h5", "forecasts_10min_GHI.h5"
                 , "forecasts_15min_BNI.h5", "forecasts_15min_GHI.h5", "forecasts_20min_BNI.h5", "forecasts_20min_GHI.h5"

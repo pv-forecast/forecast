@@ -1,17 +1,24 @@
 """Visualize OLS, Ridge, Lasso predictions vs actual values."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-# Create figures directory
-os.makedirs("figures", exist_ok=True)
+# Project paths
+PROJECT_ROOT = Path(__file__).parent.parent
+FIGURES_DIR = PROJECT_ROOT / "figures"
+FORECASTS_DIR = PROJECT_ROOT / "forecasts/linear"
+FIGURES_DIR.mkdir(exist_ok=True)
 
 # Load forecast data for a specific horizon
 horizon = "30min"
 target = "BOTH"
 
-df = pd.read_hdf(f"forecasts/linear/forecasts_{horizon}_{target}.h5", key="df")
+df = pd.read_hdf(FORECASTS_DIR / f"forecasts_{horizon}_{target}.h5", key="df")
 df_test = df[df["dataset"] == "Test"]
 
 actual = df_test[f"Pdc_{target}_actual"]
@@ -72,10 +79,10 @@ ax.set_ylim(0, max_val)
 ax.legend()
 
 plt.tight_layout()
-plt.savefig(f"figures/model_comparison_{horizon}_{target}.png", dpi=150)
+plt.savefig(FIGURES_DIR / f"model_comparison_{horizon}_{target}.png", dpi=150)
 plt.show()
 
-print(f"\nSaved to: figures/model_comparison_{horizon}_{target}.png")
+print(f"\nSaved to: {FIGURES_DIR / f'model_comparison_{horizon}_{target}.png'}")
 
 # Also show error distribution
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -96,7 +103,7 @@ ax.legend()
 ax.axvline(x=0, color='black', linestyle='--')
 
 plt.tight_layout()
-plt.savefig(f"figures/error_distribution_{horizon}_{target}.png", dpi=150)
+plt.savefig(FIGURES_DIR / f"error_distribution_{horizon}_{target}.png", dpi=150)
 plt.show()
 
-print(f"Saved to: figures/error_distribution_{horizon}_{target}.png")
+print(f"Saved to: {FIGURES_DIR / f'error_distribution_{horizon}_{target}.png'}")

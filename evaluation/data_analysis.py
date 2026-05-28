@@ -1,16 +1,25 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import os
 import numpy as np
-import pandas as pa
+import pandas as pd
 import statsmodels as stat
 import matplotlib.pyplot as plt
 from pandas import DataFrame
 from pandas.plotting import autocorrelation_plot, lag_plot
 from statsmodels.graphics.tsaplots import plot_acf
-from DataManagement import get_data
+from data_management import DataManager
 
-# Output directories
-FIGURES_DIR = "figures"
-os.makedirs(FIGURES_DIR, exist_ok=True)
+# Project paths
+PROJECT_ROOT = Path(__file__).parent.parent
+FIGURES_DIR = PROJECT_ROOT / "figures"
+FIGURES_DIR.mkdir(exist_ok=True)
+
+def get_data():
+    """Wrapper for backwards compatibility."""
+    return DataManager().get_data()
 
 # GHI - Global Horizontal Irradiance [W/m²], data[8]
 # BNI - Beam Normal Irradiance (modeled) [W/m²], data[23]
