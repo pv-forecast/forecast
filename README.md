@@ -1,6 +1,9 @@
 # PV Power Forecasting
 
-Comparing traditional ML models (Linear Regression, Ridge, Lasso) with LSTM neural networks for photovoltaic power forecasting.
+Comparing ML models for photovoltaic power forecasting:
+- **Linear Regression** (OLS, Ridge, Lasso) - domain-engineered features
+- **LSTM Neural Network** - learns temporal patterns from sequences
+- **ARIMAX** - autoregressive with exogenous variables
 
 ## Project Structure
 
@@ -18,8 +21,8 @@ forecast/
 │   │   ├── postprocess_lstm.py   # LSTM evaluation
 │   │   └── saved/                # Saved model weights
 │   └── timeseries/
-│       ├── ar.py                 # AutoRegression (12 lags)
-│       └── arma.py               # ARIMAX(30,1,0) with exogenous
+│       ├── ar.py                 # AutoRegression (excluded from comparison)
+│       └── arma.py               # ARIMAX(12,1,1) with exogenous
 ├── forecasts/
 │   └── linear/                   # Linear model predictions (HDF5)
 ├── metrics/
@@ -78,11 +81,10 @@ python models/lstm/lstm_manytomany.py   # Many-to-Many (seq_dim=60)
 python models/lstm/postprocess_lstm.py  # Evaluate
 ```
 
-### Time Series
+### ARIMAX
 
 ```bash
-python models/timeseries/ar.py       # AutoRegression
-python models/timeseries/arma.py     # ARIMA
+python models/timeseries/arma.py     # ARIMAX with exogenous variables
 ```
 
 ## Data
@@ -174,13 +176,6 @@ Where:
 | CSGHI ratio (future)  | CSGHI_ratio_30min, 60min, 90min, 120min, 150min, 180min | 6     |
 | **Total**             |                                                         | **17**|
 
-### AR (1 feature)
-
-| Category           | Features | Count |
-|--------------------|----------|-------|
-| Power (12 lags)    | Pdc      | 1     |
-| **Total**          |          | **1** |
-
 ### ARIMAX (6 features)
 
 | Category                      | Features          | Count |
@@ -193,29 +188,42 @@ Where:
 **Notes:**
 - Linear Regression uses heavily engineered features (domain knowledge)
 - LSTM learns from raw features over a sequence
-- AR uses only historical power - no weather/irradiance data
 - ARIMAX uses exogenous variables with **persistence assumption**: X(t+h) ≈ X(t)
 - For known future variables (CSGHI, El, ENI), actual future values are used instead of persistence
 
 ## Model Architecture Details
 
-| Aspect             | Linear Regression         | LSTM                         | AR           | ARIMAX         |
-|--------------------|---------------------------|------------------------------|--------------|----------------|
-| **File**           | `regression.py`           | `lstm_manytomany.py`         | `ar.py`      | `arma.py`      |
-| **Library**        | scikit-learn              | PyTorch                      | statsmodels  | statsmodels    |
-| **Variants**       | OLS, Ridge (L2), Lasso (L1) | Many-to-Many               | AR(12)       | ARIMAX(30,1,0) |
-| **Hidden units**   | -                         | 75                           | -            | -              |
-| **Layers**         | 1                         | 2 LSTM + dropout             | -            | -              |
-| **Normalization**  | StandardScaler            | MinMaxScaler                 | None         | None           |
-| **Regularization** | Ridge: L2, Lasso: L1      | Dropout 0.5                  | -            | -              |
-| **Training**       | Closed-form / CV          | Early stopping, LR scheduler | Closed-form  | Closed-form    |
+| Aspect             | Linear Regression         | LSTM                         | ARIMAX         |
+|--------------------|---------------------------|------------------------------|----------------|
+| **File**           | `regression.py`           | `lstm_manytomany.py`         | `arma.py`      |
+| **Library**        | scikit-learn              | PyTorch                      | statsmodels    |
+| **Variants**       | OLS, Ridge (L2), Lasso (L1) | Many-to-Many               | ARIMAX(12,1,1) |
+| **Hidden units**   | -                         | 75                           | -              |
+| **Layers**         | 1                         | 2 LSTM + dropout             | -              |
+| **Normalization**  | StandardScaler            | MinMaxScaler                 | None           |
+| **Regularization** | Ridge: L2, Lasso: L1      | Dropout 0.5                  | -              |
+| **Training**       | Closed-form / CV          | Early stopping, LR scheduler | Closed-form    |
 
 ## Key Differences
 
-| Aspect                       | Linear | LSTM           | AR             | ARIMAX             |
-|------------------------------|--------|----------------|----------------|--------------------|
-| Uses measured irradiance?    | Yes    | Yes            | No             | Yes (persistence)  |
-| Uses engineered features?    | Yes    | No             | No             | No                 |
-| Learns from sequence?        | No     | Yes (60 steps) | Yes (12 lags)  | Yes (30 lags)      |
-| Needs future X values?       | No     | No             | No             | Yes (persistence)  |
-| Captures non-linearity?      | No     | Yes            | No             | No                 |
+| Aspect                       | Linear | LSTM           | ARIMAX             |
+|------------------------------|--------|----------------|--------------------|
+| Uses measured irradiance?    | Yes    | Yes            | Yes (persistence)  |
+| Uses engineered features?    | Yes    | No             | No                 |
+| Learns from sequence?        | No     | Yes (60 steps) | Yes (12 lags)      |
+| Needs future X values?       | No     | No             | Yes (persistence)  |
+| Captures non-linearity?      | No     | Yes            | No                 |
+
+## Results
+
+**Model Comparison (30-180 min horizons, Smart Persistence baseline):**
+
+| Model | Avg Skill | Features | Comment |
+|-------|-----------|----------|---------|
+| **LSTM** | **18.9%** | 17 | Best overall, temporal patterns + CSGHI ratio |
+| ARIMAX | TBD | 6 | Re-run pending (fixed CSGHI baseline) |
+| Linear | 4.8% | 77+ | Domain-engineered features |
+
+All models use **Smart Persistence** as baseline: `P(t+h) = P(t) × CSGHI(t+h)/CSGHI(t)`
+
+*Note: AR model excluded from comparison - univariate (no CSGHI access), uses different baseline*

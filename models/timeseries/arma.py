@@ -125,11 +125,15 @@ def run_arima_forecast(order=(12, 1, 1), horizons=[6, 12, 18, 24, 30, 36], sampl
     horizon_actuals = {h: [] for h in horizons}
     horizon_sp = {h: [] for h in horizons}
 
+    # Store timestamps for alignment
+    test_timestamps_filtered = test_timestamps[test_mask].reset_index(drop=True)
+    forecast_timestamps = []
+
     # Use a simpler approach: fit once, forecast from different starting points
     # by using the forecast method with dynamic prediction
 
     for i, t in enumerate(test_indices):
-        if i % 100 == 0:
+        if i % 1000 == 0:
             print(f"  Progress: {i}/{n_points} ({100*i/n_points:.0f}%)", flush=True)
 
         try:
@@ -177,19 +181,19 @@ def run_arima_forecast(order=(12, 1, 1), horizons=[6, 12, 18, 24, 30, 36], sampl
 
                 forecast = current_model.forecast(steps=max_h)
 
-            # Get ENI for Smart Persistence
-            ENI_current = test_exog.iloc[t]["ENI"] if use_exog else 1.0
+            # Get CSGHI for Smart Persistence (not ENI - CSGHI varies throughout day)
+            CSGHI_current = test_exog.iloc[t]["CSGHI"] if use_exog else 1.0
 
             # Collect predictions for each horizon
             for h in horizons:
                 pred = max(0, forecast[h-1])  # Clip to non-negative
                 actual = test_P.iloc[t + h]
 
-                # Smart Persistence: P_sp = P(t) * ENI(t+h) / ENI(t)
+                # Smart Persistence: P_sp = P(t) * CSGHI(t+h) / CSGHI(t)
                 if use_exog:
-                    ENI_future = test_exog.iloc[t + h]["ENI"]
-                    if ENI_current > 0:
-                        sp_pred = P_current * (ENI_future / ENI_current)
+                    CSGHI_future = test_exog.iloc[t + h]["CSGHI"]
+                    if CSGHI_current > 0:
+                        sp_pred = P_current * (CSGHI_future / CSGHI_current)
                     else:
                         sp_pred = P_current
                 else:
@@ -198,6 +202,9 @@ def run_arima_forecast(order=(12, 1, 1), horizons=[6, 12, 18, 24, 30, 36], sampl
                 horizon_predictions[h].append(pred)
                 horizon_actuals[h].append(actual)
                 horizon_sp[h].append(sp_pred)
+
+            # Store timestamp (once per forecast point, after all horizons)
+            forecast_timestamps.append(test_timestamps_filtered.iloc[t])
 
         except Exception as e:
             # Skip problematic points
@@ -256,13 +263,16 @@ def run_arima_forecast(order=(12, 1, 1), horizons=[6, 12, 18, 24, 30, 36], sampl
     df_metrics.to_csv(metrics_file, index=False)
     print(f"\nMetrics saved to {metrics_file}")
 
-    # Save forecasts
+    # Save forecasts with timestamps
     forecasts_file = FORECASTS_DIR / "arima_forecasts.npz"
-    np.savez(forecasts_file, **{
+    save_dict = {
         f"{k}_{sub}": v[sub]
         for k, v in all_forecasts.items()
         for sub in ['actual', 'predicted', 'smart_persistence']
-    })
+    }
+    # Add timestamps for alignment
+    save_dict['timestamps'] = np.array(forecast_timestamps, dtype='datetime64[ns]')
+    np.savez(forecasts_file, **save_dict)
     print(f"Forecasts saved to {forecasts_file}")
 
     # Summary
@@ -281,6 +291,7 @@ def run_arima_forecast(order=(12, 1, 1), horizons=[6, 12, 18, 24, 30, 36], sampl
 
 if __name__ == "__main__":
     # Run ARIMAX with exogenous variables (GHI, kt, El, ENI)
-    # Future exogenous values use persistence: X(t+h) = X(t)
-    # sample_step=50 for faster evaluation
-    df = run_arima_forecast(order=(12, 1, 1), use_exog=True, sample_step=50)
+    # Future exogenous values use persistence for GHI, kt
+    # Actual future values for CSGHI, El, ENI (calculable)
+    # sample_step=1 for full evaluation (~100 min runtime)
+    df = run_arima_forecast(order=(12, 1, 1), use_exog=True, sample_step=1)
