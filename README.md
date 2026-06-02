@@ -220,8 +220,8 @@ Where:
 
 | Model | Avg Skill | Features | Comment |
 |-------|-----------|----------|---------|
-| **LSTM** | **18.9%** | 17 | Best overall, temporal patterns + CSGHI ratio |
-| ARIMAX | TBD | 6 | Re-run pending (fixed CSGHI baseline) |
+| **ARIMAX** | **44.9%** | 6 | Best overall, CSGHI baseline + exogenous |
+| LSTM | 18.9% | 17 | Temporal patterns + CSGHI ratio |
 | Linear | 4.8% | 77+ | Domain-engineered features |
 
 All models use **Smart Persistence** as baseline: `P(t+h) = P(t) × CSGHI(t+h)/CSGHI(t)`
