@@ -15,6 +15,7 @@ FIGURES_DIR.mkdir(exist_ok=True)
 
 # Horizons
 horizons = [30, 60, 90, 120, 150, 180]
+horizon_indices = [5, 11, 17, 23, 29, 35]  # 0-indexed for 30, 60, 90, 120, 150, 180 min
 
 # ============ ARIMAX ============
 arimax = pd.read_csv(PROJECT_ROOT / 'metrics/timeseries/arima_results.csv')
@@ -25,28 +26,13 @@ arimax_rmse_sp = arimax['RMSE_sp'].values
 # ============ LSTM ============
 lstm = pd.read_csv(PROJECT_ROOT / 'metrics/lstm/LSTM_m2m_Layer_2_Input_17_hidden_75_future_El.csv')
 
-# Parse all rows into arrays
-all_rmse = []
-all_rmse_sp = []
-for idx, row in lstm.iterrows():
-    rmse_arr = np.fromstring(row['RMSE'].strip('[]'), sep=' ')
-    rmse_sp_arr = np.fromstring(row['RMSE_sp'].strip('[]'), sep=' ')
-    all_rmse.append(rmse_arr)
-    all_rmse_sp.append(rmse_sp_arr)
+# New format: 36 rows (one per horizon), scalar values per column
+lstm['Skill'] = (1 - lstm['RMSE'] / lstm['RMSE_sp']) * 100
 
-all_rmse = np.array(all_rmse)
-all_rmse_sp = np.array(all_rmse_sp)
-
-# Average across epochs
-lstm_rmse_mean = np.nanmean(all_rmse, axis=0)
-lstm_rmse_sp_mean = np.nanmean(all_rmse_sp, axis=0)
-lstm_skill_all = (1 - lstm_rmse_mean / lstm_rmse_sp_mean) * 100
-
-# Extract specific horizons (indices 5, 11, 17, 23, 29, 35)
-horizon_indices = [5, 11, 17, 23, 29, 35]
-lstm_skill = [lstm_skill_all[i] for i in horizon_indices]
-lstm_rmse = [lstm_rmse_mean[i] for i in horizon_indices]
-lstm_rmse_sp = [lstm_rmse_sp_mean[i] for i in horizon_indices]
+# Extract specific horizons
+lstm_skill = [lstm.iloc[i]['Skill'] for i in horizon_indices]
+lstm_rmse = [lstm.iloc[i]['RMSE'] for i in horizon_indices]
+lstm_rmse_sp = [lstm.iloc[i]['RMSE_sp'] for i in horizon_indices]
 
 # ============ LINEAR ============
 linear = pd.read_hdf(PROJECT_ROOT / 'metrics/linear/results_BOTH_intra-hour.h5', key='df')
