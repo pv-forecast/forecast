@@ -183,7 +183,14 @@ def trainModel(model, batch_size, seq_dim, epochs, patience=7, initial_lr=1e-3):
         batch_test = 200
         test_len = int(len(X_test)/batch_test)
 
-        rmse, rmse_sp, mae, mbe = [], [], [], []
+        # Accumulate squared errors for correct pooled RMSE calculation
+        sum_sq_error = np.zeros(window_LSTM)  # Sum of squared errors per horizon
+        sum_sq_error_sp = np.zeros(window_LSTM)
+        sum_abs_error = np.zeros(window_LSTM)
+        sum_error = np.zeros(window_LSTM)
+        n_valid = np.zeros(window_LSTM)  # Count of valid (non-NaN) samples per horizon
+        n_valid_sp = np.zeros(window_LSTM)
+
         p_sp, p_pred, p_real = [], [], []
 
         with torch.no_grad():
@@ -218,14 +225,27 @@ def trainModel(model, batch_size, seq_dim, epochs, patience=7, initial_lr=1e-3):
                 p_pred.append(y_pred.numpy())
                 p_real.append(y.numpy())
 
-                # Compute metrics
+                # Compute errors
                 error = observ.numpy() - test_pred.numpy()
                 error_sp = observ.numpy() - y_sp.numpy()
 
-                rmse_sp.append(np.sqrt(np.nanmean(error_sp ** 2, axis=0)))
-                rmse.append(np.sqrt(np.nanmean(error ** 2, axis=0)))
-                mae.append(np.nanmean(np.abs(error), axis=0))
-                mbe.append(np.nanmean(error, axis=0))
+                # Accumulate for pooled metrics (handle NaN correctly)
+                for h in range(window_LSTM):
+                    valid_mask = ~np.isnan(error[:, h])
+                    valid_mask_sp = ~np.isnan(error_sp[:, h])
+
+                    sum_sq_error[h] += np.sum(error[valid_mask, h] ** 2)
+                    sum_sq_error_sp[h] += np.sum(error_sp[valid_mask_sp, h] ** 2)
+                    sum_abs_error[h] += np.sum(np.abs(error[valid_mask, h]))
+                    sum_error[h] += np.sum(error[valid_mask, h])
+                    n_valid[h] += np.sum(valid_mask)
+                    n_valid_sp[h] += np.sum(valid_mask_sp)
+
+        # Calculate pooled metrics (correct RMSE calculation)
+        rmse = np.sqrt(sum_sq_error / np.maximum(n_valid, 1))
+        rmse_sp = np.sqrt(sum_sq_error_sp / np.maximum(n_valid_sp, 1))
+        mae = sum_abs_error / np.maximum(n_valid, 1)
+        mbe = sum_error / np.maximum(n_valid, 1)
 
         # Epoch metrics
         avg_train_rmse = np.mean(epoch_loss) * feat.CAPACITY  # Denormalize for comparison
