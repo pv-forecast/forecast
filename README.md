@@ -198,10 +198,10 @@ Where:
 | **File**           | `regression.py`           | `lstm_manytomany.py`         | `arma.py`      |
 | **Library**        | scikit-learn              | PyTorch                      | statsmodels    |
 | **Variants**       | OLS, Ridge (L2), Lasso (L1) | Many-to-Many               | ARIMAX(12,1,1) |
-| **Hidden units**   | -                         | 75                           | -              |
-| **Layers**         | 1                         | 2 LSTM + dropout             | -              |
+| **Hidden units**   | -                         | 136                          | -              |
+| **Layers**         | 1                         | 3 LSTM + dropout             | -              |
 | **Normalization**  | StandardScaler            | MinMaxScaler                 | None           |
-| **Regularization** | Ridge: L2, Lasso: L1      | Dropout 0.5                  | -              |
+| **Regularization** | Ridge: L2, Lasso: L1      | Dropout 0.45                 | -              |
 | **Training**       | Closed-form / CV          | Early stopping, LR scheduler | Closed-form    |
 
 ## Key Differences
@@ -220,8 +220,8 @@ Where:
 
 | Model | Avg Skill | Features | Comment |
 |-------|-----------|----------|---------|
-| **ARIMAX** | **44.9%** | 6 | Best overall, CSGHI baseline + exogenous |
-| LSTM | 18.9% | 17 | Temporal patterns + CSGHI ratio |
+| **LSTM** | **50.2%** | 17 | 3-layer, 136 hidden, dropout 0.45 |
+| ARIMAX | 44.9% | 6 | CSGHI baseline + exogenous |
 | Linear | 4.8% | 77+ | Domain-engineered features |
 
 All models use **Smart Persistence** as baseline: `P(t+h) = P(t) × CSGHI(t+h)/CSGHI(t)`
