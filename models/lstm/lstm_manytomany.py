@@ -116,16 +116,18 @@ sp_test = torch.from_numpy(test_sp).float()
 ENI_train = torch.from_numpy(train_ENI).float()
 ENI_test = torch.from_numpy(test_ENI).float()
 
-def initializeNewModel(input_dim, hidden_dim, layer_dim, output_dim):
+def initializeNewModel(input_dim, hidden_dim, layer_dim, output_dim, dropout=0.5):
+    """
+    Initialize LSTM model.
 
-    # Initializing LSTM
-    # input_dim = number of features
-    # hidden_dim = number of hidden layer
-    # layer_dim = number of stacked LSTM's
-    # output_dim = output horizon
-
-    model = lstm_model.LSTM(input_dim, hidden_dim, layer_dim, output_dim)
-
+    Args:
+        input_dim: number of features
+        hidden_dim: number of hidden units per layer
+        layer_dim: number of stacked LSTM layers
+        output_dim: output horizon (36 for 5-180min)
+        dropout: dropout rate (default 0.5, literature suggests 0.1-0.2)
+    """
+    model = lstm_model.LSTM(input_dim, hidden_dim, layer_dim, output_dim, dropout=dropout)
     return model
 
 def trainModel(model, batch_size, seq_dim, epochs, patience=7, initial_lr=1e-3):
@@ -301,13 +303,20 @@ def trainModel(model, batch_size, seq_dim, epochs, patience=7, initial_lr=1e-3):
 # START
 # define which Model to load or name Model to be initialized (layer = ...)
 
-batch_size = 128  # Larger batch for more stable gradients
-layer = 2
-hidden = 75
-epochs = 100  # More epochs to see full convergence curve
+# ============ HYPERPARAMETERS ============
+# Improved based on literature (PLOS ONE 2023, MDPI Remote Sensing 2023):
+# - Hidden units: 75 → 128 (more capacity)
+# - Layers: 2 → 3 (deeper network)
+# - Dropout: 0.5 → 0.2 (less regularization, model was underfitting)
+# - Batch size: 128 → 256 (more stable gradients)
+batch_size = 256
+layer = 3
+hidden = 128
+dropout = 0.2
+epochs = 100
 
-# CHECK if train/test Set seasonal or chronological
-file = "LSTM_m2m_Layer_{}_Input_{}_hidden_{}_future_El".format(layer, X_train.shape[2], hidden)
+# Model naming
+file = "LSTM_m2m_Layer_{}_Input_{}_hidden_{}_improved".format(layer, X_train.shape[2], hidden)
 PATH_load = os.path.join(MODELS_DIR, file)
 PATH_save = os.path.join(MODELS_DIR, file)
 PATH_save_met = os.path.join(METRICS_DIR, "{}.csv".format(file))
@@ -324,7 +333,14 @@ if load_model:
     test_loss = trainModel(model, batch_size, seq_dim, epochs, initial_lr=5e-4)
     print("finished fine-tuning")
 else:
-    model = initializeNewModel(input_dim=X_train.shape[2], hidden_dim=hidden, layer_dim=layer, output_dim=36)
+    model = initializeNewModel(
+        input_dim=X_train.shape[2],
+        hidden_dim=hidden,
+        layer_dim=layer,
+        output_dim=36,
+        dropout=dropout
+    )
     print(model)
+    print(f"\nHyperparameters: layers={layer}, hidden={hidden}, dropout={dropout}, batch_size={batch_size}")
     test_loss = trainModel(model, batch_size, seq_dim, epochs, patience=15, initial_lr=1e-3)
     print("finished training")

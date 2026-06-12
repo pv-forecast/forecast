@@ -3,17 +3,19 @@ import torch.nn as nn
 
 
 class LSTM(torch.nn.Module):
-    def __init__(self, input_dim, hidden_dim, layer_dim, output_dim):
+    def __init__(self, input_dim, hidden_dim, layer_dim, output_dim, dropout=0.5):
         super(LSTM, self).__init__()
         # Hidden layer/dimensions
         self.hidden_dim = hidden_dim
         # Number of stacked LSTM's
-        self.layer_dim = layer_dim # nummer erhöhen
+        self.layer_dim = layer_dim
         # batch_first=True causes input/output tensors to be of shape
         # (batch_dim, seq_dim, feature_dim)
-        self.lstm = nn.LSTM(input_dim, hidden_dim, layer_dim, batch_first=True)
-        # Dropout layer
-        self.drop = nn.Dropout(p=0.5)
+        # Add dropout between LSTM layers (only if layer_dim > 1)
+        lstm_dropout = dropout if layer_dim > 1 else 0.0
+        self.lstm = nn.LSTM(input_dim, hidden_dim, layer_dim, batch_first=True, dropout=lstm_dropout)
+        # Dropout layer after LSTM
+        self.drop = nn.Dropout(p=dropout)
         # Readout layer
         self.fc = nn.Linear(hidden_dim, output_dim)
 
