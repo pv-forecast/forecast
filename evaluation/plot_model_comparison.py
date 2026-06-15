@@ -62,7 +62,7 @@ lr_test['hour'] = test_filtered['hour'].values
 
 # ============ LSTM ============
 print("Loading LSTM model...")
-model_path = MODELS_DIR / 'LSTM_m2m_Layer_2_Input_17_hidden_75_future_El'
+model_path = MODELS_DIR / 'LSTM_best_Layer_3_Input_17_hidden_136'
 model = torch.load(model_path, weights_only=False)
 model.eval()
 
@@ -125,7 +125,7 @@ for selected_date, day_type in selected_dates:
         print(f"No data for {selected_date}, skipping...")
         continue
 
-    times = pd.to_datetime(lr_day['datetime']).values
+    times = pd.to_datetime(lr_day['datetime']).values + np.timedelta64(HORIZON_MIN, 'm')
     actual = lr_day['Pdc_BOTH_actual'].values
     smart_persistence = lr_day['Pdc_BOTH_sp'].values
     lr_ols = lr_day['Pdc_BOTH_ols'].values
@@ -142,13 +142,20 @@ for selected_date, day_type in selected_dates:
                 X_tensor = torch.from_numpy(X_seq).float().unsqueeze(0)
                 with torch.no_grad():
                     pred = model(X_tensor)
-                lstm_predictions.append(pred[0, HORIZON_IDX].item() * feat.CAPACITY)
-                lstm_times.append(test_Y_filtered.iloc[idx]['datetime'])
+                pred_value = pred[0, HORIZON_IDX].item()
+                denorm_value = pred_value * feat.CAPACITY
+                lstm_predictions.append(denorm_value)
+                # IMPORTANT: Plot at valid time (forecast_time + horizon), not forecast issue time
+                forecast_issue_time = test_Y_filtered.iloc[idx]['datetime']
+                valid_time = forecast_issue_time + pd.Timedelta(minutes=HORIZON_MIN)
+                lstm_times.append(valid_time)
 
     # ARIMAX predictions
     if arimax_available:
         arimax_day_mask = arimax_dates == selected_date
-        arimax_day_times = arimax_timestamps[arimax_day_mask].values
+        # IMPORTANT: Plot at valid time (forecast_time + horizon), not forecast issue time
+        arimax_day_times = arimax_timestamps[arimax_day_mask] + pd.Timedelta(minutes=HORIZON_MIN)
+        arimax_day_times = arimax_day_times.values
         arimax_day_pred = arimax_pred_all[arimax_day_mask]
     else:
         arimax_day_times, arimax_day_pred = [], []

@@ -14,9 +14,9 @@ forecast/
 │   ├── linear/
 │   │   └── regression.py         # OLS, Ridge, Lasso (5-180min horizons)
 │   ├── lstm/
-│   │   ├── lstm.py               # One-to-Many LSTM (seq_dim=1)
-│   │   ├── lstm_manytomany.py    # Many-to-Many LSTM (seq_dim=60)
+│   │   ├── train_lstm.py         # Unified LSTM training (presets, custom, Optuna)
 │   │   ├── lstm_model.py         # PyTorch LSTM class
+│   │   ├── data_utils.py         # Data loading utilities
 │   │   ├── treat_nans.py         # NaN handling utilities
 │   │   ├── postprocess_lstm.py   # LSTM evaluation
 │   │   └── saved/                # Saved model weights
@@ -35,24 +35,6 @@ forecast/
 ├── visualize_models.py           # Plot predictions vs actual
 ├── forecast_kt.py                # Irradiance (kt) forecasting
 └── data_analysis.py              # Exploratory data analysis
-```
-
-## Reading Results
-
-Results are stored in HDF5 format:
-
-```python
-import pandas as pd
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', None)
-
-# Forecasts (predictions vs actual)
-df = pd.read_hdf("forecasts/linear/forecasts_30min_BOTH.h5", key="df")
-print(df.head())
-
-# Metrics (MAE, RMSE, Skill per horizon)
-df = pd.read_hdf("metrics/linear/results_BOTH_intra-hour.h5", key="df")
-print(df.head())
 ```
 
 ## Requirements
@@ -76,9 +58,16 @@ python visualize_models.py           # Plot predictions vs actual
 ### LSTM Neural Networks
 
 ```bash
-python models/lstm/lstm.py              # One-to-Many (seq_dim=1)
-python models/lstm/lstm_manytomany.py   # Many-to-Many (seq_dim=60)
-python models/lstm/postprocess_lstm.py  # Evaluate
+# Train with presets
+python models/lstm/train_lstm.py --preset best       # Optuna best (3L, 136h, d=0.45)
+python models/lstm/train_lstm.py --preset improved   # Improved (3L, 128h, d=0.2)
+python models/lstm/train_lstm.py --preset baseline   # Baseline (2L, 75h, d=0.5)
+
+# Train with custom hyperparameters
+python models/lstm/train_lstm.py --custom --layers 3 --hidden 136 --dropout 0.45 --name my_model
+
+# Evaluate
+python models/lstm/postprocess_lstm.py
 ```
 
 ### ARIMAX
@@ -195,7 +184,7 @@ Where:
 
 | Aspect             | Linear Regression         | LSTM                         | ARIMAX         |
 |--------------------|---------------------------|------------------------------|----------------|
-| **File**           | `regression.py`           | `lstm_manytomany.py`         | `arma.py`      |
+| **File**           | `regression.py`           | `train_lstm.py`              | `arma.py`      |
 | **Library**        | scikit-learn              | PyTorch                      | statsmodels    |
 | **Variants**       | OLS, Ridge (L2), Lasso (L1) | Many-to-Many               | ARIMAX(12,1,1) |
 | **Hidden units**   | -                         | 136                          | -              |
@@ -224,6 +213,18 @@ Where:
 | ARIMAX | 44.9% | 6 | CSGHI baseline + exogenous |
 | Linear | 4.8% | 77+ | Domain-engineered features |
 
+
+
 All models use **Smart Persistence** as baseline: `P(t+h) = P(t) × CSGHI(t+h)/CSGHI(t)`
 
 *Note: AR model excluded from comparison - univariate (no CSGHI access), uses different baseline*
+
+### Example Forecasts
+
+**Sunny Day (2020-05-28):**
+
+![Sunny Day Comparison](figures/model_comparison_sunny.png)
+
+**Cloudy Day (2020-04-26):**
+
+![Cloudy Day Comparison](figures/model_comparison_cloudy.png)
