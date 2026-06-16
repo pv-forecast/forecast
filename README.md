@@ -213,8 +213,6 @@ Where:
 | ARIMAX | 44.9% | 6 | CSGHI baseline + exogenous |
 | Linear | 4.8% | 77+ | Domain-engineered features |
 
-
-
 All models use **Smart Persistence** as baseline: `P(t+h) = P(t) × CSGHI(t+h)/CSGHI(t)`
 
 *Note: AR model excluded from comparison - univariate (no CSGHI access), uses different baseline*
