@@ -219,10 +219,10 @@ All models use **Smart Persistence** as baseline: `P(t+h) = P(t) × CSGHI(t+h)/C
 
 ### Example Forecasts
 
-**Sunny Day (2020-05-28):**
+**Sunny Day:**
 
 ![Sunny Day Comparison](figures/model_comparison_sunny.png)
 
-**Cloudy Day (2020-04-26):**
+**Cloudy Day:**
 
 ![Cloudy Day Comparison](figures/model_comparison_cloudy.png)
